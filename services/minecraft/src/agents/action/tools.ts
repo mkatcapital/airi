@@ -27,6 +27,21 @@ function formatWearingItem(slot: string, item: string | undefined): string {
 
 export const actionsList: Action[] = [
   {
+    name: 'finish_turn',
+    description: '[REQUIRED] Call this to commit your thought and finish your turn. Must be called exactly once at the end of your reasoning.',
+    execution: 'parallel', // Instant - handled specially by Brain, not queued
+    schema: z.object({
+      thought: z.string().describe('Your current thought, internal monologue, and anything to remember for next turn'),
+      ultimate_goal: z.string().optional().describe('Update your long-term goal if changed'),
+      current_task: z.string().optional().describe('Update what you are doing now if changed'),
+      strategy: z.string().optional().describe('Update your short-term plan if changed'),
+    }),
+    perform: _mineflayer => (thought: string, ultimate_goal?: string, current_task?: string, strategy?: string): string => {
+      // This is handled specially by Brain - return serialized data for processing
+      return JSON.stringify({ thought, ultimate_goal, current_task, strategy })
+    },
+  },
+  {
     name: 'chat',
     description: 'Send a chat message to players in the game. Use this to communicate, respond to questions, or announce what you are doing.',
     // Treat chat like other queued actions so Brain can log it consistently

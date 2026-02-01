@@ -10,7 +10,7 @@ import type { BotEvent, MineflayerWithAgents } from '../types'
 
 import { system, user } from 'neuri/openai'
 
-import { clearAsyncActionQueue, drainAsyncActionQueue } from '../../agents/action/adapter'
+import { clearAsyncActionQueue, clearFinishTurnData, drainAsyncActionQueue, type FinishTurnData, getFinishTurnData } from '../../agents/action/adapter'
 import { config } from '../../composables/config'
 import { DebugService } from '../../debug'
 import { Blackboard } from './blackboard'
@@ -30,61 +30,7 @@ function toErrorMessage(err: unknown): string {
   }
 }
 
-function getJsonErrorPosition(err: unknown): number | null {
-  const msg = toErrorMessage(err)
-  const match = msg.match(/position\s+(\d+)/i)
-  if (!match)
-    return null
-
-  const pos = Number.parseInt(match[1], 10)
-  return Number.isFinite(pos) ? pos : null
-}
-
-function extractJsonCandidate(input: string): string {
-  const trimmed = input.trim()
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
-  if (fenced?.[1])
-    return fenced[1].trim()
-
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start >= 0 && end > start)
-    return trimmed.slice(start, end + 1)
-
-  return trimmed
-}
-
-function validateLLMResponse(parsed: unknown): parsed is { thought: string } {
-  if (typeof parsed !== 'object' || parsed === null)
-    return false
-  const obj = parsed as Record<string, unknown>
-  // Must have 'thought' (string) at minimum - actions are now handled via function calling queue
-  return typeof obj.thought === 'string'
-}
-
-function parseLLMResponseJson<T>(response: string): T {
-  const candidate = extractJsonCandidate(response)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(candidate)
-  }
-  catch (err) {
-    const pos = getJsonErrorPosition(err)
-    const window = 120
-    const snippet = (typeof pos === 'number')
-      ? candidate.slice(Math.max(0, pos - window), Math.min(candidate.length, pos + window))
-      : candidate.slice(0, Math.min(candidate.length, 240))
-    throw new Error(`Failed to parse LLM JSON response: ${toErrorMessage(err)}; snippet=${JSON.stringify(snippet)}`)
-  }
-
-  // Validate structure - LLM sometimes hallucinates wrong format (e.g., tool call format)
-  if (!validateLLMResponse(parsed)) {
-    const snippet = JSON.stringify(parsed).slice(0, 200)
-    throw new Error(`LLM returned malformed response (missing thought): ${snippet}`)
-  }
-
-  return parsed as T
-}
+// Note: validateLLMResponse and parseLLMResponseJson removed - now using pure function calling with finish_turn tool
 
 function getErrorStatus(err: unknown): number | undefined {
   const anyErr = err as any
@@ -125,15 +71,7 @@ interface BrainDeps {
   reflexManager: ReflexManager
 }
 
-interface LLMResponse {
-  thought: string
-  blackboard?: {
-    UltimateGoal?: string
-    CurrentTask?: string
-    executionStrategy?: string
-  }
-  // Note: actions are no longer in JSON response - they are queued via function calling
-}
+// Note: LLMResponse interface removed - now using FinishTurnData from adapter
 
 interface QueuedEvent {
   event: BotEvent
@@ -477,12 +415,11 @@ export class Brain {
     // 4. Act (Execute Decision)
     this.log('INFO', `Brain: Thought: ${decision.thought}`)
 
-    // Update Blackboard (with null checks for malformed LLM responses)
-    const bb = decision.blackboard
+    // Update Blackboard from finish_turn data
     this.blackboard.update({
-      ultimateGoal: bb?.UltimateGoal || this.blackboard.ultimate_goal,
-      currentTask: bb?.CurrentTask || this.blackboard.current_task,
-      strategy: bb?.executionStrategy || this.blackboard.strategy,
+      ultimateGoal: decision.ultimate_goal || this.blackboard.ultimate_goal,
+      currentTask: decision.current_task || this.blackboard.current_task,
+      strategy: decision.strategy || this.blackboard.strategy,
     })
 
     // Sync Blackboard to Debug
@@ -558,12 +495,16 @@ export class Brain {
     this.debugService.updateBlackboard(this.blackboard)
   }
 
-  private async decide(sysPrompt: string, userMsg: string): Promise<LLMResponse | null> {
+  private async decide(sysPrompt: string, userMsg: string): Promise<FinishTurnData | null> {
     const maxAttempts = 3
 
-    const decideOnce = async (): Promise<LLMResponse | null> => {
+    const decideOnce = async (): Promise<FinishTurnData | null> => {
       const request_start = Date.now()
-      const response = await this.deps.neuri.handleStateless(
+
+      // Clear finish_turn data before LLM call
+      clearFinishTurnData()
+
+      const textOutput = await this.deps.neuri.handleStateless(
         [
           system(sysPrompt),
           user(userMsg),
@@ -571,7 +512,9 @@ export class Brain {
         async (ctx) => {
           const completion = await ctx.reroute('action', ctx.messages, {
             model: config.openai.model,
-            response_format: { type: 'json_object' },
+            // No response_format - pure function calling
+            // Force at least one tool call (finish_turn at minimum)
+            tool_choice: 'required',
           } as any) as any
 
           // Trace LLM
@@ -584,17 +527,23 @@ export class Brain {
             duration: Date.now() - request_start,
           })
 
-          if (!completion || !completion.choices?.[0]?.message?.content) {
-            throw new Error('LLM failed to return content')
-          }
-          return completion.choices[0].message.content
+          // Return text content (chain-of-thought) - may be null if only tool calls
+          return completion?.choices?.[0]?.message?.content || null
         },
       )
 
-      if (!response)
-        return null
+      // Log chain-of-thought text if present
+      if (textOutput && typeof textOutput === 'string' && textOutput.trim()) {
+        this.log('DEBUG', 'Brain: Chain-of-thought:', { text: textOutput.slice(0, 500) })
+      }
 
-      return parseLLMResponseJson<LLMResponse>(response)
+      // Get finish_turn data that was stored during tool execution
+      const finishData = getFinishTurnData()
+      if (!finishData) {
+        throw new Error('LLM did not call finish_turn - turn incomplete')
+      }
+
+      return finishData
     }
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {

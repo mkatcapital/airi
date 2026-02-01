@@ -35,6 +35,30 @@ export function drainAsyncActionQueue(): QueuedAction[] {
   return actions
 }
 
+// --- Finish Turn Data (module-level singleton) ---
+// The finish_turn tool stores its result here for Brain to retrieve.
+
+export interface FinishTurnData {
+  thought: string
+  ultimate_goal?: string
+  current_task?: string
+  strategy?: string
+}
+
+let finishTurnData: FinishTurnData | null = null
+
+export function clearFinishTurnData(): void {
+  finishTurnData = null
+}
+
+export function setFinishTurnData(data: FinishTurnData): void {
+  finishTurnData = data
+}
+
+export function getFinishTurnData(): FinishTurnData | null {
+  return finishTurnData
+}
+
 /**
  * Generate actionable suggestions for common error codes.
  * These help the LLM understand what it can do to recover from failures.
@@ -61,6 +85,7 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
 
   Object.values(actionsList).forEach((action) => {
     const isInstant = action.execution === 'parallel'
+    const isFinishTurn = action.name === 'finish_turn'
 
     actionAgent = actionAgent.tool(
       action.name,
@@ -68,7 +93,19 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
       async ({ parameters }) => {
         mineflayer.memory.actions.push(action)
 
-        if (isInstant) {
+        if (isFinishTurn) {
+          // Special handling for finish_turn - store data for Brain to retrieve
+          const params = parameters as { thought: string, ultimate_goal?: string, current_task?: string, strategy?: string }
+          logger.withFields({ thought: params.thought?.slice(0, 50) }).log('[FINISH_TURN] Committing thought and blackboard')
+          setFinishTurnData({
+            thought: params.thought,
+            ultimate_goal: params.ultimate_goal,
+            current_task: params.current_task,
+            strategy: params.strategy,
+          })
+          return 'Turn committed successfully.'
+        }
+        else if (isInstant) {
           // Instant tools: execute immediately, return result
           logger.withFields({ name: action.name, parameters, type: 'INSTANT' }).log('[INSTANT] Executing tool')
           const fn = action.perform(mineflayer)
@@ -100,7 +137,7 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
           return `[QUEUED] ${action.name} with params ${JSON.stringify(parameters)} - will execute after your response completes`
         }
       },
-      { description: `${isInstant ? '[INSTANT] ' : '[QUEUED] '}${action.description}` },
+      { description: `${isFinishTurn ? '' : (isInstant ? '[INSTANT] ' : '[QUEUED] ')}${action.description}` },
     )
   })
 
