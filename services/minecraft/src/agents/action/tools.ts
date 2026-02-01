@@ -29,11 +29,12 @@ export const actionsList: Action[] = [
   {
     name: 'chat',
     description: 'Send a chat message to players in the game. Use this to communicate, respond to questions, or announce what you are doing.',
-    execution: 'parallel',
+    // Treat chat like other queued actions so Brain can log it consistently
+    execution: 'sequential',
     schema: z.object({
       message: z.string().describe('The message to send in chat.'),
     }),
-    perform: mineflayer => (message: string): string => {
+    perform: mineflayer => async (message: string): Promise<string> => {
       mineflayer.bot.chat(message)
       return `Sent message: "${message}"`
     },
