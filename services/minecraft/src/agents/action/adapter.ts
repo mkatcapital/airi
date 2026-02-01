@@ -13,6 +13,28 @@ import { useLogger } from '../../utils/logger'
 import { generateActionSystemPrompt } from './system-prompt'
 import { actionsList } from './tools'
 
+// --- Async Action Queue (module-level singleton) ---
+// Async actions push to this queue during tool execution.
+// Brain drains the queue after LLM generation completes.
+
+interface QueuedAction {
+  action: string
+  params: Record<string, unknown>
+  require_feedback?: boolean
+}
+
+let asyncActionQueue: QueuedAction[] = []
+
+export function clearAsyncActionQueue(): void {
+  asyncActionQueue = []
+}
+
+export function drainAsyncActionQueue(): QueuedAction[] {
+  const actions = asyncActionQueue
+  asyncActionQueue = []
+  return actions
+}
+
 /**
  * Generate actionable suggestions for common error codes.
  * These help the LLM understand what it can do to recover from failures.
@@ -38,30 +60,47 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
   let actionAgent = agent('action')
 
   Object.values(actionsList).forEach((action) => {
+    const isInstant = action.execution === 'parallel'
+
     actionAgent = actionAgent.tool(
       action.name,
       action.schema,
       async ({ parameters }) => {
-        logger.withFields({ name: action.name, parameters }).log('Calling action')
         mineflayer.memory.actions.push(action)
-        const fn = action.perform(mineflayer)
-        try {
-          return await fn(...Object.values(parameters))
-        }
-        catch (error) {
-          // Return ActionError as a result string instead of throwing
-          // This allows the LLM to learn from tool failures during its reasoning phase
-          if (error instanceof ActionError) {
-            logger.withError(error).warn('Action failed during tool call')
-            const contextStr = error.context ? `\nContext: ${JSON.stringify(error.context)}` : ''
-            const suggestion = getSuggestionForError(error.code)
-            return `[FAILED] ${error.code}: ${error.message}${contextStr}\n${suggestion}`
+
+        if (isInstant) {
+          // Instant tools: execute immediately, return result
+          logger.withFields({ name: action.name, parameters, type: 'INSTANT' }).log('[INSTANT] Executing tool')
+          const fn = action.perform(mineflayer)
+          try {
+            const result = await fn(...Object.values(parameters))
+            logger.withFields({ name: action.name, result: typeof result === 'string' ? result.slice(0, 100) : result }).log('[INSTANT] Tool completed')
+            return result
           }
-          // Re-throw non-ActionError errors (unexpected failures)
-          throw error
+          catch (error) {
+            if (error instanceof ActionError) {
+              logger.withError(error).warn('[INSTANT] Tool failed with ActionError')
+              const contextStr = error.context ? `\nContext: ${JSON.stringify(error.context)}` : ''
+              const suggestion = getSuggestionForError(error.code)
+              return `[FAILED] ${error.code}: ${error.message}${contextStr}\n${suggestion}`
+            }
+            throw error
+          }
+        }
+        else {
+          // Async tools: queue for later execution
+          const requireFeedback = (parameters as any).require_feedback ?? false
+          const queuedAction: QueuedAction = {
+            action: action.name,
+            params: parameters as Record<string, unknown>,
+            require_feedback: requireFeedback,
+          }
+          asyncActionQueue.push(queuedAction)
+          logger.withFields({ name: action.name, params: parameters, require_feedback: requireFeedback, queueLength: asyncActionQueue.length }).log('[QUEUED] Action queued for execution')
+          return `[QUEUED] ${action.name} with params ${JSON.stringify(parameters)} - will execute after your response completes`
         }
       },
-      { description: action.description },
+      { description: `${isInstant ? '[INSTANT] ' : '[QUEUED] '}${action.description}` },
     )
   })
 

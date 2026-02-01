@@ -10,6 +10,7 @@ import type { BotEvent, MineflayerWithAgents } from '../types'
 
 import { system, user } from 'neuri/openai'
 
+import { clearAsyncActionQueue, drainAsyncActionQueue } from '../../agents/action/adapter'
 import { config } from '../../composables/config'
 import { DebugService } from '../../debug'
 import { Blackboard } from './blackboard'
@@ -53,12 +54,12 @@ function extractJsonCandidate(input: string): string {
   return trimmed
 }
 
-function validateLLMResponse(parsed: unknown): parsed is { thought: string, actions: unknown[] } {
+function validateLLMResponse(parsed: unknown): parsed is { thought: string } {
   if (typeof parsed !== 'object' || parsed === null)
     return false
   const obj = parsed as Record<string, unknown>
-  // Must have 'thought' (string) and 'actions' (array) at minimum
-  return typeof obj.thought === 'string' && Array.isArray(obj.actions)
+  // Must have 'thought' (string) at minimum - actions are now handled via function calling queue
+  return typeof obj.thought === 'string'
 }
 
 function parseLLMResponseJson<T>(response: string): T {
@@ -79,7 +80,7 @@ function parseLLMResponseJson<T>(response: string): T {
   // Validate structure - LLM sometimes hallucinates wrong format (e.g., tool call format)
   if (!validateLLMResponse(parsed)) {
     const snippet = JSON.stringify(parsed).slice(0, 200)
-    throw new Error(`LLM returned malformed response (missing thought/actions): ${snippet}`)
+    throw new Error(`LLM returned malformed response (missing thought): ${snippet}`)
   }
 
   return parsed as T
@@ -126,12 +127,12 @@ interface BrainDeps {
 
 interface LLMResponse {
   thought: string
-  blackboard: {
+  blackboard?: {
     UltimateGoal?: string
     CurrentTask?: string
     executionStrategy?: string
   }
-  actions: ActionInstruction[]
+  // Note: actions are no longer in JSON response - they are queued via function calling
 }
 
 interface QueuedEvent {
@@ -462,6 +463,9 @@ export class Brain {
     const additionalCtx = this.contextFromEvent(event)
 
     // 3. Decide (LLM Call)
+    // Clear the async action queue before LLM call - actions will be queued during tool execution
+    clearAsyncActionQueue()
+
     const systemPrompt = generateBrainSystemPrompt(this.blackboard, this.deps.taskExecutor.getAvailableActions())
     const decision = await this.decide(systemPrompt, additionalCtx)
 
@@ -484,9 +488,34 @@ export class Brain {
     // Sync Blackboard to Debug
     this.debugService.updateBlackboard(this.blackboard)
 
-    // Issue Actions
-    if (decision.actions && decision.actions.length > 0) {
-      const actionsWithIds = this.ensureActionIds(decision.actions)
+    // Drain async action queue and execute
+    const queuedActions = drainAsyncActionQueue()
+    if (queuedActions.length > 0) {
+      this.log('INFO', `Brain: Processing ${queuedActions.length} queued action(s)`)
+
+      // Convert queued actions to ActionInstruction format
+      const actions: ActionInstruction[] = queuedActions.map((qa) => {
+        // Check if this is a chat action
+        if (qa.action === 'chat' && typeof (qa.params as any).message === 'string') {
+          return {
+            type: 'chat' as const,
+            message: (qa.params as any).message,
+            require_feedback: qa.require_feedback,
+          }
+        }
+        // Otherwise treat as sequential action
+        return {
+          type: 'sequential' as const,
+          step: {
+            description: `Execute ${qa.action}`,
+            tool: qa.action,
+            params: qa.params,
+          },
+          require_feedback: qa.require_feedback,
+        }
+      })
+
+      const actionsWithIds = this.ensureActionIds(actions)
 
       // Start feedback barrier for this turn if any actions require feedback.
       const required = actionsWithIds.filter(a => a.require_feedback && a.id).map(a => a.id as string)
@@ -511,7 +540,7 @@ export class Brain {
           this.blackboard.addChatMessage({
             sender: config.bot.username || '[Me]',
             content: action.message,
-            timestamp: Date.now(), // FIXME: should be the time the action was issued
+            timestamp: Date.now(),
           })
         }
       }
