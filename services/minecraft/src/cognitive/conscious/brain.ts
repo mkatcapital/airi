@@ -408,7 +408,8 @@ export class Brain {
     const decision = await this.decide(systemPrompt, additionalCtx)
 
     if (!decision) {
-      this.log('WARN', 'Brain: No decision made.')
+      this.log('WARN', 'Brain: No decision made, clearing action queue.')
+      clearAsyncActionQueue()
       return
     }
 
@@ -501,8 +502,9 @@ export class Brain {
     const decideOnce = async (): Promise<FinishTurnData | null> => {
       const request_start = Date.now()
 
-      // Clear finish_turn data before LLM call
+      // Clear finish_turn data and action queue before LLM call
       clearFinishTurnData()
+      clearAsyncActionQueue()
 
       const textOutput = await this.deps.neuri.handleStateless(
         [
@@ -513,8 +515,8 @@ export class Brain {
           const completion = await ctx.reroute('action', ctx.messages, {
             model: config.openai.model,
             // No response_format - pure function calling
-            // Force at least one tool call (finish_turn at minimum)
-            tool_choice: 'required',
+            // Use 'auto' instead of 'required' to avoid breaking some models
+            tool_choice: 'auto',
           } as any) as any
 
           // Trace LLM

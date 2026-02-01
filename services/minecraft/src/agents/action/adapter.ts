@@ -23,6 +23,7 @@ interface QueuedAction {
   require_feedback?: boolean
 }
 
+const MAX_QUEUED_ACTIONS = 5
 let asyncActionQueue: QueuedAction[] = []
 
 export function clearAsyncActionQueue(): void {
@@ -46,9 +47,11 @@ export interface FinishTurnData {
 }
 
 let finishTurnData: FinishTurnData | null = null
+let finishTurnCalled = false
 
 export function clearFinishTurnData(): void {
   finishTurnData = null
+  finishTurnCalled = false
 }
 
 export function setFinishTurnData(data: FinishTurnData): void {
@@ -57,6 +60,14 @@ export function setFinishTurnData(data: FinishTurnData): void {
 
 export function getFinishTurnData(): FinishTurnData | null {
   return finishTurnData
+}
+
+function isDuplicateAction(action: string, params: Record<string, unknown>): boolean {
+  // Simple deep quality check via JSON stringify
+  const paramsStr = JSON.stringify(params)
+  return asyncActionQueue.some(
+    qa => qa.action === action && JSON.stringify(qa.params) === paramsStr,
+  )
 }
 
 /**
@@ -96,6 +107,12 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
         if (isFinishTurn) {
           // Special handling for finish_turn - store data for Brain to retrieve
           const params = parameters as { thought: string, ultimate_goal?: string, current_task?: string, strategy?: string }
+
+          if (finishTurnCalled) {
+            logger.warn('[FINISH_TURN] Already called this turn, updating thought')
+            // return 'Turn already committed. Updates recorded.' // Optional: could return early
+          }
+
           logger.withFields({ thought: params.thought?.slice(0, 50) }).log('[FINISH_TURN] Committing thought and blackboard')
           setFinishTurnData({
             thought: params.thought,
@@ -103,6 +120,7 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
             current_task: params.current_task,
             strategy: params.strategy,
           })
+          finishTurnCalled = true
           return 'Turn committed successfully.'
         }
         else if (isInstant) {
@@ -126,7 +144,19 @@ export async function createActionNeuriAgent(mineflayer: Mineflayer): Promise<Ag
         }
         else {
           // Async tools: queue for later execution
-          const requireFeedback = (parameters as any).require_feedback ?? false
+          if (asyncActionQueue.length >= MAX_QUEUED_ACTIONS) {
+            logger.warn('[QUEUED] Queue limit reached, action rejected')
+            return `[REJECTED] Queue full (${MAX_QUEUED_ACTIONS} actions). Wait for current actions to complete.`
+          }
+
+          if (isDuplicateAction(action.name, parameters as Record<string, unknown>)) {
+            logger.warn('[QUEUED] Duplicate action rejected')
+            return `[REJECTED] Duplicate action ${action.name} already queued.`
+          }
+
+          const isChat = action.name === 'chat'
+          const defaultFeedback = !isChat
+          const requireFeedback = (parameters as any).require_feedback ?? defaultFeedback
           const queuedAction: QueuedAction = {
             action: action.name,
             params: parameters as Record<string, unknown>,

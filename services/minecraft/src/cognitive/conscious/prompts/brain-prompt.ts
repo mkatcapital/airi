@@ -45,6 +45,7 @@ To actually DO things, you MUST use tool calls.
 
 - **[INSTANT]**: Executes immediately, returns results. Use to gather info (inventory, nearbyBlocks, etc.)
 - **[QUEUED]**: Queued for later. Use for movement, crafting, combat, etc.
+  - \`require_feedback\` defaults to \`true\` (EXCEPT for \`chat\` which defaults to \`false\`).
 - **finish_turn**: REQUIRED. Call this exactly once at the end to commit your thought and any blackboard updates.
 
 ## Example Flow
@@ -55,7 +56,12 @@ To actually DO things, you MUST use tool calls.
 
 **IMPORTANT**: If you write "I'll do X" in your text but don't call the tool, nothing happens!
 
----
+## Critical Rules
+
+1. **Plan sequentially**: Don't queue multiple dependent actions at once. Queue 1-2 steps, end the turn, you'll get feedbacks later and a chance to continue.
+2. **Avoid duplicates**: Never queue the same action twice in a single turn.
+3. **Call finish_turn ONCE**: Always end with exactly one finish_turn call.
+
 
 # Context
 
