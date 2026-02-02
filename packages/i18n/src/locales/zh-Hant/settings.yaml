@@ -71,6 +71,11 @@ live2d:
     title: 停用模型滑鼠追蹤
     button-disable:
       title: 停用
+  fps:
+    title: FPS
+    description: Limit rendering frame rate
+    options:
+      unlimited: No Limit
 microphone: 麥克風
 models: 模型
 pages:
@@ -352,6 +357,7 @@ pages:
               stop:
                 label: 停止
             select-voice:
+              loading: Loading model...
               required: 請選擇聲線
           provider-voice-selection:
             custom_model_placeholder: 輸入指定模型名稱...
@@ -601,6 +607,30 @@ pages:
           validation:
             error-missing-api-key: 需要填寫 API Key 才能使用喔！
         title: ElevenLabs (11labs)
+      kokoro-local:
+        description: Local text-to-speech using Kokoro-82M.
+        fields:
+          field:
+            model:
+              label: Model Selection
+              description: Smaller models load faster but may have slightly lower quality.
+        models:
+          fp32-webgpu:
+            description: Full precision model using WebGPU - Recommended for supported devices
+          fp32:
+            description: Full precision model
+          fp16:
+            description: Half precision
+          q8:
+            description: 8-bit quantized
+          q4:
+            description: 4-bit quantized
+          q4f16:
+            description: 4-bit with FP16
+        playground:
+          default-text: Hello! This is a test of the Kokoro text-to-speech system.
+          title: Voice Playground
+        title: Kokoro TTS (Local)
       fireworks:
         description: Fireworks.ai
         title: Fireworks.ai
@@ -904,9 +934,9 @@ vrm:
     skybox-intensity: 天空盒光照強度
     skybox-specular-mix: 漫反射／鏡面反射混合係數
 websocket-secure-enabled:
-  title: 啟用安全 WebSocket (WSS)
+  title: Enable Secure WebSocket (WSS)
   description: >-
-    啟用 WSS（WebSocket Secure）以允許開發模式下行動裝置（pocket）的 HTTPS 連線。這將自動產生自簽名憑證。
+    Enable WSS (WebSocket Secure) to allow HTTPS connections for mobile (pocket) in development mode. This will automatically generate a self-signed certificate.
 wip:
   title: Work in Progress
   description: >-

@@ -71,6 +71,11 @@ live2d:
     title: Désactiver le suivi du modèle par la souris
     button-disable:
       title: Désactiver
+  fps:
+    title: FPS
+    description: Limit rendering frame rate
+    options:
+      unlimited: No Limit
 microphone: Microphone
 models: Modèle
 pages:
@@ -352,6 +357,7 @@ pages:
               stop:
                 label: Arrêter
             select-voice:
+              loading: Loading model...
               required: Veuillez sélectionner une voix
           provider-voice-selection:
             custom_model_placeholder: Entrez le nom du modèle personnalisé...
@@ -601,6 +607,30 @@ pages:
           validation:
             error-missing-api-key: Veuillez entrer une clé API pour tester la voix.
         title: ElevenLabs
+      kokoro-local:
+        description: Local text-to-speech using Kokoro-82M.
+        fields:
+          field:
+            model:
+              label: Model Selection
+              description: Smaller models load faster but may have slightly lower quality.
+        models:
+          fp32-webgpu:
+            description: Full precision model using WebGPU - Recommended for supported devices
+          fp32:
+            description: Full precision model
+          fp16:
+            description: Half precision
+          q8:
+            description: 8-bit quantized
+          q4:
+            description: 4-bit quantized
+          q4f16:
+            description: 4-bit with FP16
+        playground:
+          default-text: Hello! This is a test of the Kokoro text-to-speech system.
+          title: Voice Playground
+        title: Kokoro TTS (Local)
       fireworks:
         description: fireworks.ai
         title: Fireworks.ai
@@ -904,9 +934,9 @@ vrm:
     skybox-intensity: Intensité de la SkyBox
     skybox-specular-mix: Mélange spéculaire
 websocket-secure-enabled:
-  title: Activer WebSocket Sécurisé (WSS)
+  title: Enable Secure WebSocket (WSS)
   description: >-
-    Activez WSS (WebSocket Secure) pour permettre les connexions HTTPS pour mobile (pocket) en mode développement. Cela générera automatiquement un certificat auto-signé.
+    Enable WSS (WebSocket Secure) to allow HTTPS connections for mobile (pocket) in development mode. This will automatically generate a self-signed certificate.
 wip:
   title: Work in Progress
   description: >-

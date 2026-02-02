@@ -71,6 +71,11 @@ live2d:
     title: 禁用模型鼠标跟踪
     button-disable:
       title: 禁用
+  fps:
+    title: FPS
+    description: Limit rendering frame rate
+    options:
+      unlimited: No Limit
 microphone: 麦克风
 models: 模型
 pages:
@@ -352,6 +357,7 @@ pages:
               stop:
                 label: 停止
             select-voice:
+              loading: Loading model...
               required: 请选择声线
           provider-voice-selection:
             custom_model_placeholder: 输入指定模型名称...
@@ -601,6 +607,30 @@ pages:
           validation:
             error-missing-api-key: 需要填写 API Key 才能用哦！
         title: ElevenLabs (11labs)
+      kokoro-local:
+        description: Local text-to-speech using Kokoro-82M.
+        fields:
+          field:
+            model:
+              label: Model Selection
+              description: Smaller models load faster but may have slightly lower quality.
+        models:
+          fp32-webgpu:
+            description: Full precision model using WebGPU - Recommended for supported devices
+          fp32:
+            description: Full precision model
+          fp16:
+            description: Half precision
+          q8:
+            description: 8-bit quantized
+          q4:
+            description: 4-bit quantized
+          q4f16:
+            description: 4-bit with FP16
+        playground:
+          default-text: Hello! This is a test of the Kokoro text-to-speech system.
+          title: Voice Playground
+        title: Kokoro TTS (Local)
       fireworks:
         description: Fireworks.ai
         title: Fireworks.ai
@@ -904,9 +934,9 @@ vrm:
     skybox-intensity: 天空盒光照强度
     skybox-specular-mix: 漫反射/镜面反射混合系数
 websocket-secure-enabled:
-  title: 启用安全 WebSocket (WSS)
+  title: 启用安全WebSocket (WSS)
   description: >-
-    启用 WSS（WebSocket Secure）以允许开发模式下移动端（pocket）的 HTTPS 连接。这将自动生成自签名证书。
+    启用 WSS (WebSocket Secure) 以便在开发模式下允许移动设备(Pocket) 连接HTTPS 。这将自动生成一个自签名证书。
 wip:
   title: 正在开发中
   description: >-

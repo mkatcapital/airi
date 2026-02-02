@@ -71,6 +71,11 @@ live2d:
     title: モデルのマウストラッキングを無効にする
     button-disable:
       title: 無効
+  fps:
+    title: FPS
+    description: Limit rendering frame rate
+    options:
+      unlimited: No Limit
 microphone: マイク
 models: モデル
 pages:
@@ -352,6 +357,7 @@ pages:
               stop:
                 label: 停止
             select-voice:
+              loading: Loading model...
               required: 音声を選択してください
           provider-voice-selection:
             custom_model_placeholder: カスタムモデル名を入力…
@@ -601,6 +607,30 @@ pages:
           validation:
             error-missing-api-key: 音声をテストするにはAPIキーを入力してください。
         title: ElevenLabs
+      kokoro-local:
+        description: Local text-to-speech using Kokoro-82M.
+        fields:
+          field:
+            model:
+              label: Model Selection
+              description: Smaller models load faster but may have slightly lower quality.
+        models:
+          fp32-webgpu:
+            description: Full precision model using WebGPU - Recommended for supported devices
+          fp32:
+            description: Full precision model
+          fp16:
+            description: Half precision
+          q8:
+            description: 8-bit quantized
+          q4:
+            description: 4-bit quantized
+          q4f16:
+            description: 4-bit with FP16
+        playground:
+          default-text: Hello! This is a test of the Kokoro text-to-speech system.
+          title: Voice Playground
+        title: Kokoro TTS (Local)
       fireworks:
         description: fireworks.ai
         title: Fireworks.ai
@@ -904,9 +934,9 @@ vrm:
     skybox-intensity: スカイボックスの強度
     skybox-specular-mix: 鏡面反射の混合
 websocket-secure-enabled:
-  title: セキュア WebSocket (WSS) を有効にする
+  title: Enable Secure WebSocket (WSS)
   description: >-
-    開発モードでモバイル（pocket）のHTTPS接続を許可するために、WSS（WebSocket Secure）を有効にします。これにより自己署名証明書が自動的に生成されます。
+    Enable WSS (WebSocket Secure) to allow HTTPS connections for mobile (pocket) in development mode. This will automatically generate a self-signed certificate.
 wip:
   title: 開発中
   description: >-

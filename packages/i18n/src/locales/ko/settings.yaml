@@ -71,6 +71,11 @@ live2d:
     title: Disable model mouse tracking
     button-disable:
       title: Disable
+  fps:
+    title: FPS
+    description: Limit rendering frame rate
+    options:
+      unlimited: No Limit
 microphone: Microphone
 models: Model
 pages:
@@ -352,6 +357,7 @@ pages:
               stop:
                 label: Stop
             select-voice:
+              loading: Loading model...
               required: Please select a voice
           provider-voice-selection:
             custom_model_placeholder: Enter custom model name...
@@ -601,6 +607,30 @@ pages:
           validation:
             error-missing-api-key: Please enter an API key to test the voice.
         title: ElevenLabs
+      kokoro-local:
+        description: Local text-to-speech using Kokoro-82M.
+        fields:
+          field:
+            model:
+              label: Model Selection
+              description: Smaller models load faster but may have slightly lower quality.
+        models:
+          fp32-webgpu:
+            description: Full precision model using WebGPU - Recommended for supported devices
+          fp32:
+            description: Full precision model
+          fp16:
+            description: Half precision
+          q8:
+            description: 8-bit quantized
+          q4:
+            description: 4-bit quantized
+          q4f16:
+            description: 4-bit with FP16
+        playground:
+          default-text: Hello! This is a test of the Kokoro text-to-speech system.
+          title: Voice Playground
+        title: Kokoro TTS (Local)
       fireworks:
         description: fireworks.ai
         title: Fireworks.ai
@@ -904,9 +934,9 @@ vrm:
     skybox-intensity: SkyBox Intensity
     skybox-specular-mix: Specular Mix
 websocket-secure-enabled:
-  title: 보안 WebSocket (WSS) 활성화
+  title: Enable Secure WebSocket (WSS)
   description: >-
-    개발 모드에서 모바일(pocket)의 HTTPS 연결을 허용하기 위해 WSS(WebSocket Secure)를 활성화합니다. 자체 서명 인증서가 자동으로 생성됩니다.
+    Enable WSS (WebSocket Secure) to allow HTTPS connections for mobile (pocket) in development mode. This will automatically generate a self-signed certificate.
 wip:
   title: Work in Progress
   description: >-
